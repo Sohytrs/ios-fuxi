@@ -1241,8 +1241,9 @@ ud_setup(void)
             if (index != 0x3ff) wlan_m3(index - 0x300);
             memcpy(data, wl3_report, sizeof(wl3_report)); n=sizeof(wl3_report);
         } else ok = false;
-    } else if (type == 0xc0 && req == 0x54 && value >= 1 && value <= 60) {
-        /* Host-requested reset deadline: now + value minutes (bounded, never disabled). */
+    } else if (type == 0xc0 && req == 0x54 && value >= 1) {
+        /* Host-requested reset deadline: now + value minutes. value is uint16_t,
+         * so 65535 min (~45 days) is the practical maximum: no auto-reset. */
         monitor_report[MON_DEADLINE]=rsr("cntpct_el0")+rsr("cntfrq_el0")*60*value;
         __asm__ volatile("dsb sy" ::: "memory");
         memcpy(data, (const void *)&monitor_report[MON_DEADLINE], 8); n=8;
