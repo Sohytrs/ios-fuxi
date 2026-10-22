@@ -412,7 +412,19 @@ public:
   if (!handler) return kIOReturnBadArgument;
   *handler=nullptr;
   if (type!=0x4147 && type!=0) return kIOReturnUnsupported;
-  if (IOUserClient::clientHasPrivilege(securityID,kIOClientPrivilegeAdministrator)!=kIOReturnSuccess) return kIOReturnNotPrivileged;
+  /* SWEET: fuxigpu_open_any=1 lets non-root CA clients (backboardd,
+   * SpringBoard, the Metal daemon) open this client. Default stays root-only
+   * because the original safety argument is that a root daemon crash cannot
+   * release pages into live DMA; a non-root client gets no such guarantee, so
+   * the relaxed mode is opt-in per boot. */
+  static int open_any = -1;
+  if (open_any < 0) {
+   unsigned v = 0;
+   open_any = (PE_parse_boot_argn("fuxigpu_open_any",&v,sizeof(v)) && v == 1) ? 1 : 0;
+  }
+  if (!open_any &&
+      IOUserClient::clientHasPrivilege(securityID,kIOClientPrivilegeAdministrator)!=kIOReturnSuccess)
+   return kIOReturnNotPrivileged;
   auto *uc=new FuxiAdrenoUserClient;
   if (!uc) return kIOReturnNoMemory;
   if (!uc->initWithTask(task,securityID,type)) { uc->release(); return kIOReturnNoMemory; }
