@@ -137,7 +137,7 @@ install_bash() {
     fetch_verified "https://ftp.gnu.org/gnu/bash/bash-$BASH_VERSION_PIN.tar.gz" \
         "bash-$BASH_VERSION_PIN.tar.gz" "$BASH_SHA256"
     tar -xzf "$downloads/bash-$BASH_VERSION_PIN.tar.gz" -C "$work"
-    (cd "$work/bash-$BASH_VERSION_PIN" && ./configure --prefix="$native" --without-bash-malloc >/dev/null && make -j6 >/dev/null && make install >/dev/null)
+    (cd "$work/bash-$BASH_VERSION_PIN" && ./configure --prefix="$native" --without-bash-malloc --disable-nls >/dev/null && make -j6 >/dev/null && make install >/dev/null)
     "$native/bin/bash" --version | head -1
 }
 
@@ -264,7 +264,7 @@ mesa() {
     fetch "https://ftp.gnu.org/gnu/bison/bison-$BISON_VERSION.tar.xz" "$downloads/bison-$BISON_VERSION.tar.xz"
     echo "$BISON_SHA256  $downloads/bison-$BISON_VERSION.tar.xz" | shasum -a 256 -c -
     tar -xf "$downloads/bison-$BISON_VERSION.tar.xz" -C "$work"
-    (cd "$work/bison-$BISON_VERSION"; ./configure --prefix="$work/native"; make -j6; make install)
+    (cd "$work/bison-$BISON_VERSION"; ./configure --prefix="$work/native" --disable-nls; make -j6; make install)
     python3 -m venv "$work/venv"
     "$work/venv/bin/pip" install meson==1.12.1 mako==1.4.3 MarkupSafe==3.0.4 pyyaml==6.0.3 packaging==26.3
     export PATH="$work/native/bin:$work/venv/bin:$PATH"
