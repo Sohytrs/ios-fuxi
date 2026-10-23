@@ -630,6 +630,18 @@ static bool identitySwizzle(MTLTextureSwizzleChannels s) {
 } @catch(NSException *e) {(void)e;[self rejectSelector:_cmd];}}
 - (void)endEncoding {@try {CENSUS();if(_ended)invalid(@"endEncoding twice");_ended=YES;_command->_encoding=NO;} @catch(NSException *e) {(void)e;[self rejectSelector:_cmd];}}
 @end
+/* Non-root publication switch, mirroring UniXNU's NativeAdrenoMetal.publish:
+ * with this marker present an allowed client keeps its device even when it is
+ * not root, which is what backboardd and SpringBoard need to composite the UI.
+ * Without the marker the original root-only policy is unchanged. */
+#ifndef FUXI_MTL_PUBLISH_MARKER
+#define FUXI_MTL_PUBLISH_MARKER "/usr/local/share/fuxi/metal-publish"
+#endif
+static bool publishAllowed() {
+ static int cached=-1;
+ if(cached<0) {struct stat st; cached=(stat(FUXI_MTL_PUBLISH_MARKER,&st)==0)?1:0;}
+ return cached==1;
+}
 /* Methods are copied onto a runtime subclass. No fixed private layout/ivars are
  * read, initialized, or freed through the private superclass implementation. */
 @interface FuxiDeviceMethods : FuxiObject
@@ -640,7 +652,7 @@ static bool identitySwizzle(MTLTextureSwizzleChannels s) {
  checkClient();
  if(clientMode==fuxi::ClientMode::deny) {[self release];return nil;}
  CENSUS();
- if((clientMode!=fuxi::ClientMode::census && geteuid()!=0) || !port || owner(self)) {[self release];return nil;}
+ if((clientMode!=fuxi::ClientMode::census && geteuid()!=0 && !publishAllowed()) || !port || owner(self)) {[self release];return nil;}
  if(clientMode==fuxi::ClientMode::census) {
   FuxiOwner *state=[FuxiOwner new];
   objc_setAssociatedObject(self,&ownerKey,state,OBJC_ASSOCIATION_RETAIN_NONATOMIC);[state release];return self;
