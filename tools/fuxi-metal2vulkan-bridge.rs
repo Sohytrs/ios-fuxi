@@ -1,5 +1,5 @@
 // Original Fuxi adapter, compiled only into the separate external LGPL library.
-// No translator code is copied here. ABI v3: synchronous, owned handles, bounded input.
+// No translator code is copied here. ABI v4: synchronous, owned handles, bounded input.
 use std::{ffi::{c_char,c_void,CStr,CString}, panic::{catch_unwind,AssertUnwindSafe}};
 use std::{collections::VecDeque, sync::{Mutex,OnceLock}};
 use ash::vk::{self,Handle};
@@ -31,7 +31,7 @@ pub struct VertexAttribute {location:u32,binding:u32,format:u32,offset:u32}
 #[derive(Clone,Copy,Debug,Default)]
 pub struct BufferInput {length:u64,offset:u64,bytes:u32}
 #[repr(C)]
-pub struct DrawInput {buffers:[[BufferInput;4];2],formats:[u32;4],filters:[u32;4],count:u32,start:u32,indexed:u32,strip:u32,index_length:u64,index_offset:u64}
+pub struct DrawInput {buffers:[[BufferInput;4];2],formats:[u32;8],filters:[u32;8],count:u32,start:u32,indexed:u32,strip:u32,index_length:u64,index_offset:u64}
 #[repr(C)]
 #[derive(Clone,Copy)]
 pub struct Push {offset:u32,size:u32,stages:u32,bytes:[u8;128]}
@@ -67,11 +67,11 @@ fn sampling_dependency(d:&RuntimeDependency)->bool {
         (RuntimeFact::BufferRangeLimit{slot},Mechanism::PlanTimeCheck)=>slot.class==SlotClass::Buffer && slot.index<4 && matches!(slot.stage,Stage::Vertex|Stage::Fragment),
         (RuntimeFact::SamplerCoordinates{slot},Mechanism::Specialization)
         | (RuntimeFact::SamplerReduction{slot},Mechanism::PlanTimeCheck)
-        | (RuntimeFact::CubicSampler{slot},Mechanism::Variant) => slot.stage==Stage::Fragment && slot.class==SlotClass::Sampler && slot.index<4,
+        | (RuntimeFact::CubicSampler{slot},Mechanism::Variant) => slot.stage==Stage::Fragment && slot.class==SlotClass::Sampler && slot.index<8,
         (RuntimeFact::SrgbDeviceDecode{slot},Mechanism::PlanTimeCheck)
         | (RuntimeFact::SrgbTexture{slot},Mechanism::Variant)
         | (RuntimeFact::YCbCrTexture{slot},Mechanism::Variant)
-        | (RuntimeFact::CrossClassReads{slot},Mechanism::Variant) => slot.stage==Stage::Fragment && slot.class==SlotClass::Texture && slot.index<4,
+        | (RuntimeFact::CrossClassReads{slot},Mechanism::Variant) => slot.stage==Stage::Fragment && slot.class==SlotClass::Texture && slot.index<8,
         _=>false,
     }
 }
@@ -119,7 +119,7 @@ unsafe fn name<'a>(p:*const c_char)->Result<&'a str,String> {
     if bytes.is_empty() || bytes.len()>127{return Err("function name length".into());}
     std::str::from_utf8(bytes).map_err(|e|e.to_string())
 }
-#[no_mangle] pub extern "C" fn fuxi_m2v_abi()->u32 {3}
+#[no_mangle] pub extern "C" fn fuxi_m2v_abi()->u32 {4}
 #[no_mangle] pub unsafe extern "C" fn fuxi_m2v_open(p:*const u8,n:usize,err:*mut c_char,cap:usize)->*mut c_void {
     attempt(err,cap,|| {
         if p.is_null() || n==0 || n>4*1024*1024{return Err("library outside 1..4 MiB".into());}
@@ -377,7 +377,7 @@ fn check_plan(p:&metal2vulkan::bind::BindingPlan,expected:&metal2vulkan::cache::
      let r=c.descriptor_ranges.iter().find(|r|r.set==0 && r.binding==w.binding).ok_or("missing planned buffer range")?;d.offset=r.range.offset;d.range=r.range.range;
     },
     WriteSource::CombinedImageSampler{image:ImageSource::Texture{slot,view},sampler:SamplerSource::Slot{slot:s,compare:false,integer:false,opaque_black:OpaqueBlackBorder::Stated}}=>{
-     if slot.stage!=Stage::Fragment || slot.class!=SlotClass::Texture || slot.index>=4 || s.stage!=Stage::Fragment || s.class!=SlotClass::Sampler || s.index>=4 || i.formats[slot.index as usize]==0 || i.filters[s.index as usize]==0 || view.view_type.as_raw()!=1 || view.aspect.as_raw()!=1 || view.layout.as_raw()!=5 || view.level.is_some() || view.twin || view.shader_swizzle{return Err("sample view/slot".into());}
+     if slot.stage!=Stage::Fragment || slot.class!=SlotClass::Texture || slot.index>=8 || s.stage!=Stage::Fragment || s.class!=SlotClass::Sampler || s.index>=8 || i.formats[slot.index as usize]==0 || i.filters[s.index as usize]==0 || view.view_type.as_raw()!=1 || view.aspect.as_raw()!=1 || view.layout.as_raw()!=5 || view.level.is_some() || view.twin || view.shader_swizzle{return Err("sample view/slot".into());}
      d.slot=slot.index;d.sampler=s.index;d.format=view.format.as_raw() as u32;d.components=[view.components.r.as_raw() as u32,view.components.g.as_raw() as u32,view.components.b.as_raw() as u32,view.components.a.as_raw() as u32];
     },_=>{let kind=format!("{:?}",w.source);return Err(format!("unsupported planned descriptor source {}",kind.split([' ','{','(']).next().unwrap_or("unknown")));}
    }o.descriptors[o.descriptor_count as usize]=d;o.descriptor_count+=1;
@@ -394,11 +394,12 @@ fn check_plan(p:&metal2vulkan::bind::BindingPlan,expected:&metal2vulkan::cache::
 fn draw_state(i:&DrawInput)->Result<BindState,String> {
   let mut state=BindState::default();
   for (n,stage) in [Stage::Vertex,Stage::Fragment].into_iter().enumerate(){let mut table=StageTable::default();
-   for slot in 0..4 {let b=i.buffers[n][slot];if b.length>0 {
+   for slot in 0..8 {
+   if slot<4 {let b=i.buffers[n][slot];if b.length>0 {
     if b.offset>=b.length || b.length>16*1024*1024 || (b.bytes!=0 && (b.offset!=0 || b.length>4096)){return Err("buffer bounds".into());}
     table.buffers.insert(slot as u32,if b.bytes!=0 {metal2vulkan::bind::BoundBuffer::Bytes{len:b.length as u32,attribute_stride:None}}
       else {metal2vulkan::bind::BoundBuffer::Buffer{length:b.length,offset:b.offset,gpu_address:0,device_address:None,attribute_stride:None}});
-   }
+   }}
    // Some sRGB plans request resources outside this consumer. Keep sampling
    // explicitly outside M7 rather than accepting only incidental plan shapes.
    if n==1 && i.formats[slot]==81{return Err("M7 sRGB sampling deferred".into());}
