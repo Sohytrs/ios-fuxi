@@ -188,7 +188,7 @@ unsafe fn name<'a>(p:*const c_char)->Result<&'a str,String> {
         descriptor.color_attachments[0]=Some(color);
         let mut vd=metal2vulkan::pipeline::VertexDescriptor::new();
         for (i,a) in options.attributes.iter().enumerate().filter(|(_,a)|a.format!=0) {
-            if a.buffer>=4 || !matches!(a.format,9|29|31) || options.strides[a.buffer as usize]==0 || options.strides[a.buffer as usize]>256 {return Err("bounded vertex descriptor".into());}
+            if a.buffer>=4 || options.strides[a.buffer as usize]==0 || options.strides[a.buffer as usize]>256 {return Err(format!("bounded vertex descriptor buffer={} stride={}",a.buffer,options.strides[a.buffer as usize]).into());}
             vd.attributes.insert(i as u32,metal2vulkan::pipeline::VertexAttributeDescriptor::new(metal2vulkan::metal::VertexFormat::try_from(a.format).map_err(|e|e.to_string())?,a.offset,a.buffer));
             vd.layouts.insert(a.buffer,metal2vulkan::pipeline::VertexBufferLayoutDescriptor::new(Some(options.strides[a.buffer as usize])));
         }
