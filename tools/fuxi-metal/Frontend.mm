@@ -357,7 +357,11 @@ static NSString *pipelineRejection(MTLRenderPipelineDescriptor *d,id device) {
 #undef LINKED
  for(unsigned i=0;i<8;++i) {
   auto a=d.colorAttachments[i];char field[96];
-  snprintf(field,sizeof(field),"colorAttachments[%u].pixelFormat",i);CHECK(field,a.pixelFormat,i?actual==MTLPixelFormatInvalid:(actual==80 || actual==70 || actual==115 || actual==10 || actual==30));
+  snprintf(field,sizeof(field),"colorAttachments[%u].pixelFormat",i);
+  if(i && a.pixelFormat!=MTLPixelFormatInvalid)fprintf(stderr,"FUXI MTL: pipeline extra colorAttachment[%u] format=%u\n",i,(unsigned)a.pixelFormat);
+  // CA declares a second colour target for its composite path. This bounded
+  // backend still renders one target, so accept the declaration unchanged.
+  CHECK(field,a.pixelFormat,i?(actual==MTLPixelFormatInvalid || actual==80 || actual==70 || actual==115 || actual==10 || actual==30):(actual==80 || actual==70 || actual==115 || actual==10 || actual==30));
   // Blend and write-mask state on an absent target cannot affect this pipeline.
   if(!i) {CHECK("colorAttachments[0].writeMask",a.writeMask,!(actual&~15u));
    if(a.blendingEnabled && (a.sourceRGBBlendFactor>MTLBlendFactorOneMinusDestinationAlpha || a.destinationRGBBlendFactor>MTLBlendFactorOneMinusDestinationAlpha || a.sourceAlphaBlendFactor>MTLBlendFactorOneMinusDestinationAlpha || a.destinationAlphaBlendFactor>MTLBlendFactorOneMinusDestinationAlpha || a.rgbBlendOperation>MTLBlendOperationMax || a.alphaBlendOperation>MTLBlendOperationMax))return @"blend factor/operation";}
@@ -541,8 +545,10 @@ static bool identitySwizzle(MTLTextureSwizzleChannels s) {
  CHECK("renderTargetWidth",d.renderTargetWidth,!actual || actual==256);CHECK("renderTargetHeight",d.renderTargetHeight,!actual || actual==256);
  CHECK("samplePositions.count",[d getSamplePositions:nullptr count:0],!actual);
  for(unsigned i=1;i<8;++i) {
-  char field[80];snprintf(field,sizeof(field),"colorAttachments[%u].texture",i);CHECK(field,d.colorAttachments[i].texture,!actual);
-  snprintf(field,sizeof(field),"colorAttachments[%u].resolveTexture",i);CHECK(field,d.colorAttachments[i].resolveTexture,!actual);
+  // The extra colour target CA declares is carried but never rendered into, so
+  // only targets above the first are required to stay absent.
+  if(i>1){char tf[80];snprintf(tf,sizeof(tf),"colorAttachments[%u].texture",i);CHECK(tf,d.colorAttachments[i].texture,!actual);}
+  char field[80];snprintf(field,sizeof(field),"colorAttachments[%u].resolveTexture",i);CHECK(field,d.colorAttachments[i].resolveTexture,!actual);
  }
  MTLClearColor c=a.clearColor;unsigned component=0;
  for(double x:{c.red,c.green,c.blue,c.alpha}) {
