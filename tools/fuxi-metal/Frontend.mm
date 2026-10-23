@@ -333,8 +333,14 @@ static NSString *pipelineRejection(MTLRenderPipelineDescriptor *d,id device) {
  // Validate configured attributes and per-vertex layouts against our small profile.
  if(vd)for(unsigned i=0;i<31;++i) {
   auto a=vd.attributes[i];auto l=vd.layouts[i];
-  if(a.format!=MTLVertexFormatInvalid && (i>=8 || (a.format!=MTLVertexFormatFloat2 && a.format!=MTLVertexFormatFloat4 && a.format!=MTLVertexFormatUChar4Normalized) || a.bufferIndex>=4 || a.offset>252))return @"vertexDescriptor attribute";
-  if(l.stride && (i>=4 || l.stride>256 || l.stepFunction!=MTLVertexStepFunctionPerVertex || l.stepRate!=1))return @"vertexDescriptor layout";
+  if(a.format!=MTLVertexFormatInvalid && (i>=31 || a.format>=50 || a.bufferIndex>=31 || a.offset>4096)) {
+   fprintf(stderr,"FUXI MTL: vertexDescriptor attribute i=%u form=%u buffer=%u offset=%u\n",i,(unsigned)a.format,(unsigned)a.bufferIndex,(unsigned)a.offset);
+   return @"vertexDescriptor attribute";
+  }
+  if(l.stride && (i>=31 || l.stride>4096 || (l.stepFunction!=MTLVertexStepFunctionPerVertex && l.stepFunction!=MTLVertexStepFunctionPerInstance) || l.stepRate>64)) {
+   fprintf(stderr,"FUXI MTL: vertexDescriptor layout i=%u stride=%u step=%u rate=%u\n",i,(unsigned)l.stride,(unsigned)l.stepFunction,(unsigned)l.stepRate);
+   return @"vertexDescriptor layout";
+  }
  }
  CHECK("rasterSampleCount",d.rasterSampleCount,actual==1);
  CHECK("alphaToCoverageEnabled",d.alphaToCoverageEnabled,!actual);
@@ -508,11 +514,11 @@ static bool identitySwizzle(MTLTextureSwizzleChannels s) {
 - (NSError *)error {CENSUS();return _error;}
 - (BOOL)retainedReferences {CENSUS();return YES;}
 - (id)blitCommandEncoder {CENSUS();
- if(_rejected || _status!=MTLCommandBufferStatusNotEnqueued || _encoding) {unsupported(self,_cmd);return nil;}
+ if(_status!=MTLCommandBufferStatusNotEnqueued || _encoding) {unsupported(self,_cmd);return nil;}
  FuxiBlit *e=[FuxiBlit new];e->_command=[self retain];_encoding=YES;return [e autorelease];
 }
 - (id)renderCommandEncoderWithDescriptor:(MTLRenderPassDescriptor *)d {@try {CENSUS();
- if(clientMode==fuxi::ClientMode::census || _rejected)return nil;
+ if(clientMode==fuxi::ClientMode::census)return nil;
  if(!stage4Value("renderEncoder","commandStatus",_status,_status==MTLCommandBufferStatusNotEnqueued) ||
     !stage4Value("renderEncoder","encoding",_encoding,!_encoding))return nil;
 #define CHECK(field,value,accepted) do {__typeof__(value) actual=(value);stage4Require("renderPass",field,(uint64_t)actual,(accepted));}while(0)
@@ -784,8 +790,8 @@ static bool publishAllowed() {
  CHECK("descriptor",d,actual!=nil);
  CHECK("textureType",d.textureType,actual==MTLTextureType2D);CHECK("pixelFormat",d.pixelFormat,actual==80 || actual==70 || actual==115 || actual==10 || actual==1 || actual==30 || actual==43 || actual==40);
  CHECK("width",d.width,actual>=1 && actual<=4096);CHECK("height",d.height,actual>=1 && actual<=4096);CHECK("depth",d.depth,actual==1);
- CHECK("mipmapLevelCount",d.mipmapLevelCount,actual==1);CHECK("arrayLength",d.arrayLength,actual==1);CHECK("sampleCount",d.sampleCount,actual==1);CHECK("swizzle.identity",identitySwizzle(d.swizzle),actual);
- CHECK("storageMode",d.storageMode,actual==MTLStorageModePrivate);CHECK("cpuCacheMode",d.cpuCacheMode,actual==MTLCPUCacheModeDefaultCache);
+ CHECK("mipmapLevelCount",d.mipmapLevelCount,actual>=1 && actual<=14);CHECK("arrayLength",d.arrayLength,actual==1);CHECK("sampleCount",d.sampleCount,actual==1);CHECK("swizzle.identity",identitySwizzle(d.swizzle),actual);
+ CHECK("storageMode",d.storageMode,actual==MTLStorageModePrivate || actual==MTLStorageModeMemoryless);CHECK("cpuCacheMode",d.cpuCacheMode,actual==MTLCPUCacheModeDefaultCache);
  CHECK("hazardTrackingMode",d.hazardTrackingMode,actual==MTLHazardTrackingModeDefault || actual==MTLHazardTrackingModeTracked);
  CHECK("usage",d.usage,actual && !(actual&~(MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead)));
  // allowGPUOptimizedContents is an implementation hint, not pixel semantics.
