@@ -210,13 +210,14 @@ public:
    vi.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};check(CreateImageView(device,&vi,nullptr,&t->view));return t;
   }catch(...) {guard.unlock();destroy(t);throw;}
  }
- static size_t texelBytes(uint32_t f){switch(f){case 1:case 10:return 1;case 30:return 2;case 115:return 8;case 70:case 80:case 81:return 4;default:throw std::runtime_error("unsupported pixel format");}}
+ static size_t texelBytes(uint32_t f){switch(f){case 1:case 10:return 1;case 30:case 40:case 43:return 2;case 115:return 8;case 70:case 80:case 81:return 4;default:throw std::runtime_error("unsupported pixel format");}}
  static VkFormat pixelFormat(uint32_t f) {
-  switch(f){case 80:return VK_FORMAT_B8G8R8A8_UNORM;case 81:return VK_FORMAT_B8G8R8A8_SRGB;case 70:return VK_FORMAT_R8G8B8A8_UNORM;case 115:return VK_FORMAT_R16G16B16A16_SFLOAT;case 10:case 1:return VK_FORMAT_R8_UNORM;case 30:return VK_FORMAT_R8G8_UNORM;default:throw std::runtime_error("unsupported pixel format");}
+  switch(f){case 80:return VK_FORMAT_B8G8R8A8_UNORM;case 81:return VK_FORMAT_B8G8R8A8_SRGB;case 70:return VK_FORMAT_R8G8B8A8_UNORM;case 115:return VK_FORMAT_R16G16B16A16_SFLOAT;case 10:case 1:return VK_FORMAT_R8_UNORM;case 30:return VK_FORMAT_R8G8_UNORM;case 43:return VK_FORMAT_A1R5G5B5_UNORM_PACK16;case 40:return VK_FORMAT_B5G6R5_UNORM_PACK16;default:throw std::runtime_error("unsupported pixel format");}
  }
- Texture *allocateTexture(uint32_t format=80,uint32_t usage=5) {
+ Texture *allocateTexture(uint32_t format=80,uint32_t usage=5,uint32_t width=256,uint32_t height=256) {
   std::unique_lock<std::mutex> guard(mutex);requireLive();
   if(!usage || (usage&~5u) || format==81 || (format==1 && (usage&4)))throw std::runtime_error("unsupported texture usage/sRGB/A8 attachment");
+  if(!width || !height || width>4096 || height>4096)throw std::runtime_error("texture extent outside 1..4096");
   VkFormatProperties features{};GetPhysicalDeviceFormatProperties(physical,pixelFormat(format),&features);
   VkFormatFeatureFlags needed=VK_FORMAT_FEATURE_TRANSFER_SRC_BIT|VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
   if(usage&1)needed|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
@@ -225,7 +226,7 @@ public:
   auto *t=new Texture{};t->format=format;t->vkFormat=pixelFormat(format);
   try {
    VkImageCreateInfo ii{};ii.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;ii.imageType=VK_IMAGE_TYPE_2D;ii.format=t->vkFormat;
-   ii.extent={256,256,1};ii.mipLevels=1;ii.arrayLayers=1;ii.samples=VK_SAMPLE_COUNT_1_BIT;ii.tiling=VK_IMAGE_TILING_OPTIMAL;
+   ii.extent={width,height,1};ii.mipLevels=1;ii.arrayLayers=1;ii.samples=VK_SAMPLE_COUNT_1_BIT;ii.tiling=VK_IMAGE_TILING_OPTIMAL;
    ii.usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT|(usage&4?VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT:0)|(usage&1?VK_IMAGE_USAGE_SAMPLED_BIT:0);
    check(CreateImage(device,&ii,nullptr,&t->image));VkMemoryRequirements req{};GetImageMemoryRequirements(device,t->image,&req);t->allocated=req.size;
    uint32_t type=0;while(type<memory.memoryTypeCount && (!(req.memoryTypeBits&(1u<<type)) || !(memory.memoryTypes[type].propertyFlags&VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)))++type;
