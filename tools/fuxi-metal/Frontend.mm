@@ -267,6 +267,7 @@ static NSData *constantSnapshot(MTLFunctionConstantValues *values) {
 - (void)dealloc {[_library release];[_name release];[_constants release];[super dealloc];}
 - (id)device {CENSUS();return _library->_device;}
 - (NSString *)name {CENSUS();return _name;}
+- (void)setLabel:(NSString *)s {CENSUS();(void)s;}
 - (MTLFunctionType)functionType {CENSUS();return _stage==1?MTLFunctionTypeVertex:MTLFunctionTypeFragment;}
 @end
 @implementation FuxiLibrary
@@ -484,6 +485,9 @@ static bool identitySwizzle(MTLTextureSwizzleChannels s) {
 - (id)device {CENSUS();return _device;}
 - (NSString *)label {CENSUS();return _label;}
 - (void)setLabel:(NSString *)s {CENSUS();[_label release];_label=[s copy];}
+- (void)setSubmissionQueue:(id)q {CENSUS();(void)q;}
+- (void)setCompletionQueue:(id)q {CENSUS();(void)q;}
+- (void)setGPUPriority:(NSUInteger)p {CENSUS();(void)p;}
 - (id)commandBuffer {CENSUS();
  FuxiCommandBuffer *b=[FuxiCommandBuffer new];b->_queue=[self retain];
  b->_resources=[NSMutableArray new];b->_handlers=[NSMutableArray new];return [b autorelease];
@@ -642,6 +646,12 @@ static bool publishAllowed() {
  if(cached<0) {struct stat st; cached=(stat(FUXI_MTL_PUBLISH_MARKER,&st)==0)?1:0;}
  return cached==1;
 }
+/* CA allocates depth/stencil state objects up front even when its render passes
+ * leave those attachments nil. Identity only: no fixed private layout is read. */
+@interface FuxiDepthStencilState : FuxiObject
+@end
+@implementation FuxiDepthStencilState
+@end
 /* Methods are copied onto a runtime subclass. No fixed private layout/ivars are
  * read, initialized, or freed through the private superclass implementation. */
 @interface FuxiDeviceMethods : FuxiObject
@@ -709,17 +719,26 @@ static bool publishAllowed() {
 - (NSUInteger)iosurfaceReadOnlyTextureAlignmentBytes {CENSUS();return 256;}
 - (NSUInteger)maxFragmentTextures {CENSUS();return 4;}
 - (NSUInteger)maxFragmentSamplers {CENSUS();return 4;}
-- (NSUInteger)maxTextureWidth2D {CENSUS();return 256;}
-- (NSUInteger)maxTextureHeight2D {CENSUS();return 256;}
+- (NSUInteger)maxTextureWidth2D {CENSUS();return 4096;}
+- (NSUInteger)maxTextureHeight2D {CENSUS();return 4096;}
 - (NSUInteger)maxColorAttachments {CENSUS();return 1;}
 - (NSString *)vendorName {CENSUS();return @"Qualcomm";}
 - (BOOL)supportsYCBCRFormats {CENSUS();return NO;}
 - (BOOL)supportsYCBCRFormats12 {CENSUS();return NO;}
+- (BOOL)supportsYCBCRPackedFormats12 {CENSUS();return NO;}
 - (BOOL)supportsNativeHardwareFP16 {CENSUS();return NO;}
 - (BOOL)supportsTileShaders {CENSUS();return NO;}
 - (BOOL)supportsSIMDGroup {CENSUS();return NO;}
 - (id)newCommandQueueWithMaxCommandBufferCount:(NSUInteger)n {CENSUS();
  if(!n || n>64) {unsupported(self,_cmd);return nil;}return [self newCommandQueue];
+}
+- (id)newDepthStencilStateWithDescriptor:(MTLDepthStencilDescriptor *)d {CENSUS();
+ if(clientMode==fuxi::ClientMode::census)return nil;
+ (void)d;return [[FuxiDepthStencilState new] autorelease];
+}
+- (id)newPipelineLibraryWithFilePath:(NSURL *)url error:(NSError **)error {CENSUS();
+ // Pipeline libraries are a binary cache; absence only costs recompilation.
+ if(error)*error=nil;(void)url;return nil;
 }
 - (id)newCommandQueue {CENSUS();if(clientMode==fuxi::ClientMode::census)return nil;FuxiQueue *q=[FuxiQueue new];q->_device=[self retain];return q;}
 - (id)newBufferWithLength:(NSUInteger)n options:(MTLResourceOptions)options {CENSUS();
@@ -763,8 +782,8 @@ static bool publishAllowed() {
  if(clientMode==fuxi::ClientMode::census)return nil;
 #define CHECK(field,value,accepted) do {__typeof__(value) actual=(value);if(!stage4Value("texture",field,(uint64_t)actual,(accepted)))return nil;}while(0)
  CHECK("descriptor",d,actual!=nil);
- CHECK("textureType",d.textureType,actual==MTLTextureType2D);CHECK("pixelFormat",d.pixelFormat,actual==80 || actual==70 || actual==115 || actual==10 || actual==1 || actual==30);
- CHECK("width",d.width,actual==256);CHECK("height",d.height,actual==256);CHECK("depth",d.depth,actual==1);
+ CHECK("textureType",d.textureType,actual==MTLTextureType2D);CHECK("pixelFormat",d.pixelFormat,actual==80 || actual==70 || actual==115 || actual==10 || actual==1 || actual==30 || actual==43 || actual==40);
+ CHECK("width",d.width,actual>=1 && actual<=4096);CHECK("height",d.height,actual>=1 && actual<=4096);CHECK("depth",d.depth,actual==1);
  CHECK("mipmapLevelCount",d.mipmapLevelCount,actual==1);CHECK("arrayLength",d.arrayLength,actual==1);CHECK("sampleCount",d.sampleCount,actual==1);CHECK("swizzle.identity",identitySwizzle(d.swizzle),actual);
  CHECK("storageMode",d.storageMode,actual==MTLStorageModePrivate);CHECK("cpuCacheMode",d.cpuCacheMode,actual==MTLCPUCacheModeDefaultCache);
  CHECK("hazardTrackingMode",d.hazardTrackingMode,actual==MTLHazardTrackingModeDefault || actual==MTLHazardTrackingModeTracked);
@@ -772,7 +791,7 @@ static bool publishAllowed() {
  // allowGPUOptimizedContents is an implementation hint, not pixel semantics.
 #undef CHECK
  FuxiTexture *t=[FuxiTexture new];t->_device=[self retain];t->_usage=d.usage;
- try {t->_texture=owner(self)->backend->allocateTexture((uint32_t)d.pixelFormat,(uint32_t)d.usage);}catch(const std::exception &e) {fprintf(stderr,"FUXI MTL: texture FAIL %s\n",e.what());[t release];return nil;}return t;
+ try {t->_texture=owner(self)->backend->allocateTexture((uint32_t)d.pixelFormat,(uint32_t)d.usage,(uint32_t)d.width,(uint32_t)d.height);}catch(const std::exception &e) {fprintf(stderr,"FUXI MTL: texture FAIL %s\n",e.what());[t release];return nil;}return t;
 }
 - (id)newTextureWithDescriptor:(MTLTextureDescriptor *)d iosurface:(IOSurfaceRef)surface plane:(NSUInteger)plane {CENSUS();
  if(clientMode==fuxi::ClientMode::census)return nil;
