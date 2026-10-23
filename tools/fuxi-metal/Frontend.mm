@@ -840,7 +840,8 @@ static bool publishAllowed() {
  if(NSString *field=pipelineRejection(d,self))return metalError(error,field.UTF8String);
  id v=d.vertexFunction,f=d.fragmentFunction;
  FuxiPipeline *p=[FuxiPipeline new];p->_device=[self retain];
- try {auto a=(FuxiFunction *)v,b=(FuxiFunction *)f;fuxi::CompileOptions o{};auto color=d.colorAttachments[0];
+ fuxi::CompileOptions o{};
+ try {auto a=(FuxiFunction *)v,b=(FuxiFunction *)f;auto color=d.colorAttachments[0];
   o.format=(uint32_t)color.pixelFormat;o.blend=color.blendingEnabled;o.mask=(uint32_t)color.writeMask;
   o.srcRGB=(uint32_t)color.sourceRGBBlendFactor;o.dstRGB=(uint32_t)color.destinationRGBBlendFactor;o.rgbOp=(uint32_t)color.rgbBlendOperation;
   o.srcAlpha=(uint32_t)color.sourceAlphaBlendFactor;o.dstAlpha=(uint32_t)color.destinationAlphaBlendFactor;o.alphaOp=(uint32_t)color.alphaBlendOperation;
