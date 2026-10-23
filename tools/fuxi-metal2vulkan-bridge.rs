@@ -61,6 +61,14 @@ struct Product {vertex:Vec<u32>,fragment:Vec<u32>,vname:CString,fname:CString,
 static CACHE:OnceLock<Mutex<VecDeque<(String,Product)>>> = OnceLock::new();
 // Only these facts may be discharged by the bounded plan/instantiate consumer.
 fn sampling_dependency(d:&RuntimeDependency)->bool {
+    // ConstexprSampled means the shader samples with a compile-time coordinate, so
+    // the translator asks for a Variant -- the mechanism this consumer already
+    // discharges at draw time. Match by name because the enum's field shape belongs
+    // to the external crate, not to this ABI.
+    let kind=format!("{:?}",d.fact);
+    if kind.starts_with("ConstexprSampled") || kind.starts_with("ConstexprTexture") {
+        return matches!(d.mechanism,Mechanism::Variant);
+    }
     match (d.fact,d.mechanism) {
         (RuntimeFact::VertexFetch{attr},Mechanism::KeyProjection)=>attr<8,
         (RuntimeFact::VertexBufferStride{layout},Mechanism::PipelineStateOrPushConstant)=>layout<4,
