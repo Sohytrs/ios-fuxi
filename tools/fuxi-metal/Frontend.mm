@@ -848,7 +848,14 @@ static bool publishAllowed() {
   for(unsigned i=0;i<4;++i)o.strides[i]=(uint32_t)d.vertexDescriptor.layouts[i].stride;
   NSData *constants[2]={a->_constants,b->_constants};for(unsigned i=0;i<2;++i){o.constantCount[i]=(uint32_t)(constants[i].length/sizeof(fuxi::Constant));if(o.constantCount[i]>32)throw std::runtime_error("constants bound");if(constants[i].length)memcpy(o.constants[i],constants[i].bytes,constants[i].length);}
   p->_pipeline=owner(self)->backend->compilePipeline(a->_library->_library,a->_name.UTF8String,b->_library->_library,b->_name.UTF8String,o);}
- catch(const std::exception &e) {[p release];return metalError(error,e.what());}return p;
+ catch(const std::exception &e) {
+  // Name what CA actually asked for so the next round is a code change, not a guess.
+  unsigned n=0;char attrs[512]{};size_t used=0;
+  for(unsigned i=0;i<8;++i){auto x=o.attributes[i];if(!x.format)continue;++n;
+   used+=snprintf(attrs+used,sizeof(attrs)-used,"%s%u:f%u/o%u/b%u",used?",":"",i,x.format,x.offset,x.buffer);}
+  fprintf(stderr,"FUXI MTL: pipeline CA wants vertex=%s strides=%u,%u,%u,%u colorFormat=%u -> %s\n",
+   n?attrs:"none",o.strides[0],o.strides[1],o.strides[2],o.strides[3],o.format,e.what());
+  [p release];return metalError(error,e.what());}return p;
 }
 // MTLAddDevice on 16.7 calls these hooks. Capabilities come exclusively from
 // our overrides; no Apple family/limit table is installed in the base object.
