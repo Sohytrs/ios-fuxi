@@ -333,7 +333,10 @@ fn make_product(device:Device,descriptor:RenderPipelineDescriptor,options:&Compi
         let specs=plan.specialization.entries.iter().map(|e|Specialization{id:e.constant_id,offset:e.offset,size:e.size as u32}).collect();
         let mut descriptors=Vec::new();
         for set in &pipeline.layout.sets {for b in &set.bindings {
-            if b.count!=1 || b.flags.as_raw()!=0 || b.immutable_sampler.is_some() || !matches!(b.ty.as_raw() as u32,1|6|7) || b.stages.as_raw()&!17!=0 {return Err("unsupported descriptor layout".into());}
+            if b.count!=1 || b.flags.as_raw()!=0 || b.immutable_sampler.is_some() || !matches!(b.ty.as_raw() as u32,1|6|7) || b.stages.as_raw()&!17!=0 {
+                return Err(format!("unsupported descriptor layout binding={} count={} flags={} ty={} stages={}",
+                    b.binding,b.count,b.flags.as_raw(),b.ty.as_raw(),b.stages.as_raw()).into());
+            }
             descriptors.push(Descriptor{binding:b.binding,ty:b.ty.as_raw() as u32,stages:b.stages.as_raw(),..Descriptor::default()});
         }}
         let mut push_bytes=[0u8;128];let(mut push_offset,mut push_size,mut push_stages)=(0,0,0);
