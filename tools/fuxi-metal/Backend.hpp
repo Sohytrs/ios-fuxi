@@ -23,7 +23,7 @@ inline void check(VkResult r) { if(r!=VK_SUCCESS) throw std::runtime_error("Vulk
  X(FlushMappedMemoryRanges) X(InvalidateMappedMemoryRanges) X(CreateCommandPool) X(DestroyCommandPool) \
  X(AllocateCommandBuffers) X(BeginCommandBuffer) X(EndCommandBuffer) X(CmdFillBuffer) \
  X(CmdCopyBuffer) X(CreateImage) X(DestroyImage) X(GetImageMemoryRequirements) X(BindImageMemory) \
- X(GetImageSubresourceLayout) X(CmdCopyBufferToImage) X(CmdCopyImage) X(CreateSampler) X(DestroySampler) \
+ X(GetImageSubresourceLayout) X(CmdCopyBufferToImage) X(CmdCopyImage) X(CmdClearColorImage) X(CreateSampler) X(DestroySampler) \
  X(CreateDescriptorSetLayout) X(DestroyDescriptorSetLayout) X(CreateDescriptorPool) X(DestroyDescriptorPool) \
  X(AllocateDescriptorSets) X(UpdateDescriptorSets) X(CmdBindDescriptorSets) X(CreateImageView) X(DestroyImageView) X(CreateRenderPass) X(DestroyRenderPass) \
  X(CreateFramebuffer) X(DestroyFramebuffer) X(CreateShaderModule) X(DestroyShaderModule) \
